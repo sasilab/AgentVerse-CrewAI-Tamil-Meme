@@ -11,10 +11,16 @@ dependencies = [
     "litellm>=1.50.0",
     "requests>=2.31.0",
     "python-dotenv>=1.0.0",
+    # API server for the AgentVerse frontend.
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    # OpenLIT auto-instruments LLM + HTTP calls (one-liner observability).
+    "openlit>=1.30.0",
 ]
 
 [project.scripts]
 run_crew = "social_impact_crew.main:run"
+run_api = "social_impact_crew.api:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -105,8 +105,10 @@ That always wins over auto-detection. Format follows [LiteLLM's `provider/model`
 social_impact_crew/
 ├── pyproject.toml
 ├── .env.example
+├── architecture.md             # Mermaid diagram + locked API contract
 └── src/social_impact_crew/
-    ├── main.py                 # entry point + IP geolocation
+    ├── main.py                 # CLI entry point + IP geolocation + OpenLIT
+    ├── api.py                  # FastAPI wrapper — POST /api/run
     ├── crew.py                 # @CrewBase wiring
     ├── llm.py                  # provider auto-detection (BYOK)
     ├── config/
@@ -114,7 +116,27 @@ social_impact_crew/
     │   └── tasks.yaml          # description / expected_output / context
     └── tools/
         └── custom_tool.py      # GeocodeTool, WeatherTool, PollutionTool
+                                # + ContextVar side-channel for API capture
 ```
+
+## Running as an API (for the AgentVerse frontend)
+
+```bash
+run_api                # serves on http://127.0.0.1:8000
+# POST http://127.0.0.1:8000/api/run  {"city": "Chennai"}
+# returns {city, coords, weather, pollution, aqi_level, meme}
+```
+
+The frontend lives in a sibling folder `../agentverse-frontend/` — see its
+README for how to point it at this backend. The `POST /api/run` contract is
+stable across every AgentVerse episode.
+
+## Observability
+
+`openlit.init()` is called at the top of `main.py` and `api.py`. By default
+it ships traces/metrics to `http://127.0.0.1:4318` (OTLP). To see them, run any
+OTLP collector (Jaeger, Grafana Tempo, OpenLIT UI). No collector running = silent
+no-op, nothing breaks.
 
 ## Why these design choices
 

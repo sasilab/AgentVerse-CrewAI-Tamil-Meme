@@ -1,49 +1,147 @@
-# AgentVerse — Social Impact AI Agents
+# AgentVerse — Claude Code Project Memory
+
+> Persistent instructions for any future Claude Code session working on the
+> AgentVerse series. Read this first; it links to the other docs.
+>
+> **Canonical copy lives here, at the AgentVerse root.** Each episode folder
+> also keeps an identical copy so the episode repo is self-contained when
+> pushed. Edit at the root, then `cp` into each episode (or vice-versa) when
+> something changes.
 
 ## About
-@explainpannu's (Sasi) educational project teaching AI agent frameworks by
-building social impact agents. Each episode = one framework + one real-world
-problem.
 
-## Current Episode: CrewAI + Weather + Pollution + Tamil Meme Writer
-A 3-agent CrewAI crew that turns live weather + AQI data for any city into a
-sarcastic Tanglish meme:
-1. **Weather Reporter** — fetches weather from Open-Meteo API (free, no key)
-2. **Pollution Analyst** — fetches AQI from Open-Meteo Air Quality API (free, no key)
-3. **Sarcastic Tamil Meme Writer** — takes both outputs and writes funny Tanglish commentary
+**AgentVerse** is @explainpannu's (Sasi) educational series teaching AI agent
+frameworks through small social-impact agents. Each **episode** = one
+framework + one real-world problem. The frontend is built once and reused;
+only the backend changes per episode.
 
-## Tech Stack
-- **Framework:** CrewAI (latest)
-- **LLM:** Bring-your-own-key — Groq / Gemini / OpenAI / Ollama, auto-detected from `.env`
-- **Data APIs:** Open-Meteo (weather, air-quality, geocoding) + ipinfo.io (location)
-- **Python:** 3.10 – 3.12
+## Repo shape
 
-## Rules (apply to all code in this repo)
-- Keep code simple and beginner-friendly — this is educational content
-- Add comments explaining WHY, not just WHAT
-- Max 200 lines per file
-- Use CrewAI CLI project structure (agents.yaml, tasks.yaml, crew.py, main.py)
-- Custom tools for weather and pollution in `tools/custom_tool.py`
-- No paid APIs for data — only the LLM needs a key (and even that's optional via Ollama)
+```
+multi-agent/                       ← AgentVerse root (this folder)
+├── .gitignore                     ← protects every episode subfolder
+├── CLAUDE.md                      ← canonical (this file)
+├── API_CONTRACT.md                ← canonical
+├── EPISODES.md                    ← canonical
+├── agentverse-frontend/           ← REUSABLE PWA — one for every episode
+└── <episode>/                     ← each is its own publishable repo
+    ├── CLAUDE.md                  ← copy of canonical
+    ├── API_CONTRACT.md            ← copy of canonical
+    ├── EPISODES.md                ← copy of canonical
+    ├── SETUP.md                   ← episode-specific
+    └── ...
+```
 
-## Session Memory
-- **SESSION.md** is the running log of what's done, what's working, and what's next
-- Update SESSION.md after every major step (file created, feature added, run completed, blocker hit)
-- This file (CLAUDE.md) captures *persistent* decisions; SESSION.md captures *current* state
+## The contract that ties everything together
 
-## Decisions Made (so far)
-- **IP geolocation via ipinfo.io** (HTTPS, no key, 50k/month free) over ip-api.com (HTTP only)
-- **Provider auto-detection lives in `llm.py`** as its own module — both `main.py` (startup check) and `crew.py` (agent build) import from it
-- **Provider preference order:** explicit `MODEL` env var → Groq → Gemini → OpenAI → local Ollama (free providers first)
-- **Geocoding as a CrewAI tool**, not hardcoded coords — so the meme writer works for any city
-- **Sequential process** (weather → pollution → meme) because each step's output is the next step's input
-- **Meme writer has no tools** — it's pure creative writing over upstream task context
-- **City default = IP-detected city**, with user override via prompt or CLI arg
-- **Fail-fast on missing LLM key** at startup with a friendly message listing all 4 providers and where to get keys
-- **Per-agent temperature** via `build_llm(temperature=...)` — data agents stay at 0.4, meme writer at 0.9 for punchier output
-- **Few-shot examples in the meme task description** — model needs 3 concrete example memes to learn the trending-Tamil-meme-page tone; without them it just translates the analyst's report
-- **`litellm>=1.50.0` is a hard dep** — CrewAI 1.x dropped Groq from its native providers list, so LiteLLM is required for the default Groq path
-- **No `crew.plot()`** — method was removed in CrewAI 1.x (visualization moved to `Flow.plot()`); call removed from main.py
+Every episode backend exposes the same REST surface. See **[API_CONTRACT.md](./API_CONTRACT.md)** for the schema, examples, and a compliance checklist for new backends.
 
-## Previous Episode
-BreezyBuddy (github.com/sasilab/BreezyBuddy) — simple ReAct weather agent
+**TL;DR:**
+```
+POST /api/run  { "city": "..." }
+   → { city, coords, weather, pollution, aqi_level, meme }
+```
+
+The frontend (`agentverse-frontend/`) calls this contract verbatim. Don't
+break the JSON shape. Add optional fields if you need to extend.
+
+## Episodes shipped & planned
+
+See **[EPISODES.md](./EPISODES.md)** for what was built, what worked, what didn't.
+
+| # | Name | Framework | Status |
+|---|---|---|---|
+| EP00 | BreezyBuddy | ReAct (custom) | 🟢 shipped (pre-contract) |
+| EP01 | Social Impact Crew | CrewAI 1.x | 🟢 shipped, contract-compliant |
+| EP02+ | _planned_ | LangGraph / ADK / AutoGen / DSPy / ... | 🔴 |
+
+## Architecture decisions (and WHY)
+
+### Cross-cutting
+
+- **Separate repo per episode** — each framework should stand alone so learners can clone just the one they're studying. Reusing the frontend means only the backend changes per episode, which is the whole pedagogical point.
+- **Frontend in its own folder, not nested in any episode** — `agentverse-frontend/` is reusable. Coupling it to one backend would force a fork per episode.
+- **Stable REST contract over streaming/RPC/MCP** — anyone can ship a backend in 30 minutes if they only need to match a JSON shape. Fancier protocols add complexity that doesn't pay off for an educational series.
+- **AQI as the universal "social impact" lens** — gives every episode a real-world health hook beyond the toy demo.
+- **Docs are duplicated, not symlinked** — symlinks are flaky on Windows and break when an episode is cloned standalone. Worth the small drift cost.
+
+### Episode-internal (current pattern from EP01)
+
+- **BYOK LLM with auto-detect** — drop any one of `GROQ_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY` into `.env`, or run Ollama locally. App picks the first one it finds. Free providers ranked first. Centralised in a single `llm.py` module.
+- **Tool side-channel via `ContextVar`** — tools return human-readable strings to the LLM AND write structured dicts to a request-scoped contextvar. Lets FastAPI return typed JSON without re-parsing LLM text. *Why:* parsing LLM-formatted text is brittle; running tools twice wastes API calls.
+- **Per-agent temperature** — data/analyst agents stay at 0.4 (factual), creative agents at 0.9 (varied). *Why:* one-size-fits-all temperature either makes data agents hallucinate or makes creative agents dull.
+- **Few-shot examples in the task description** — without them, models translate the input into the target voice but miss the *form*. With 3 concrete examples they pick up the meme-page rhythm.
+- **OpenLIT for observability** — one-line `openlit.init()`. Auto-instruments LLM + HTTP. Silent no-op without an OTLP collector. *Why:* free, ungated, works with any OTLP backend; beats hand-rolled logging.
+- **In-tab Notification API + service worker over Web Push** — mirrors BreezyBuddy. Web Push needs VAPID keys and a server endpoint, which is a lot of yak-shaving for an educational project.
+
+## Known issues (and fixes)
+
+| Issue | Cause | Fix |
+|---|---|---|
+| `pip install -e .` fails on Windows with `WinError 32` | File lock on `urllib3/__pycache__` because `pip --upgrade pip` is uninstalling itself mid-process | Skip the pip upgrade; nuke and recreate `.venv` |
+| `Unable to initialize LLM with model 'groq/...'` | CrewAI 1.x dropped Groq from native providers | Hard-dep on `litellm>=1.50.0` |
+| `'Crew' object has no attribute 'plot'` | `plot()` moved to `Flow` in CrewAI 1.x | Don't call it; use the static `architecture.md` Mermaid diagram |
+| `[CrewAIEventsBus] Warning: Event pairing mismatch` | Internal telemetry warning in CrewAI 1.x | Cosmetic, ignore |
+| Emojis in PowerShell render as `ðŸ‹` | Console encoding is cp1252; file is UTF-8 | `$env:PYTHONIOENCODING="utf-8"` per session |
+| OpenLIT prints a wall of JSON on startup | No OTLP collector reachable at `:4318` (default) | Run a collector, or set `OTEL_LOG_LEVEL=error` |
+| Creative agent occasionally repeats its punchline at temp 0.9 | High temperature + few-shot can overshoot | Acceptable variance; lower temp if it becomes a problem |
+
+## Naming conventions
+
+| Thing | Convention | Example |
+|---|---|---|
+| Episode folder | `snake_case`, lowercase, descriptive | `social_impact_crew/` |
+| Episode repo on GitHub | matches folder name (or `PascalCase` if framework-named) | `sasilab/social-impact-crew` |
+| Python package | `snake_case`, matches folder | `social_impact_crew` |
+| Env vars | `UPPER_SNAKE` | `GROQ_API_KEY`, `OLLAMA_BASE_URL` |
+| Frontend assets | lowercase, descriptive | `notifications.js`, `icon.svg` |
+| API routes | `kebab-case` under `/api/` | `/api/run`, `/api/health` |
+| JSON field names | `snake_case` | `aqi_level`, `feels_like_c` |
+
+## Rules for every episode
+
+1. **Max 200 lines per file.** If you need more, split.
+2. **Comments explain WHY, not WHAT.** Names should tell you what.
+3. **No paid APIs for data.** Only the LLM needs a key (and Ollama makes even that optional).
+4. **`.env` for secrets, never committed.** Both root and episode `.gitignore` enforce this.
+5. **Beginner-friendly first.** Production hardening is fine but not at the cost of clarity.
+6. **Episode self-contained.** Push the episode folder; it should run with the README + SETUP.md alone.
+7. **Match `API_CONTRACT.md` exactly.** If the JSON shape changes, the frontend breaks for every episode. Add optional fields rather than breaking existing ones; bump a `version` query param if you must break.
+8. **Document every non-obvious decision** in the *Architecture decisions* section above. Future-you and future-Claude will thank you.
+
+## Adding a new episode
+
+1. `cp -r social_impact_crew/ <new_episode_folder>/`, rename `pyproject.toml`'s `name` and script entries.
+2. Replace `crew.py` (or equivalent) with the new framework's idiom. Keep `tools/custom_tool.py`, `llm.py`, and `api.py` mostly unchanged — they're framework-agnostic.
+3. The `api.py` handler must still return the contract from `API_CONTRACT.md`. The `ContextVar` capture pattern works for any framework whose tools you can wrap.
+4. Add a row to the table in **§Episodes shipped & planned** above.
+5. Add a full entry to `EPISODES.md` (use the template at the bottom of that file).
+6. If you made a new architectural decision, add it to **§Architecture decisions** above.
+
+## Keeping these docs in sync
+
+Three files are duplicated between the AgentVerse root and each episode folder:
+
+- `CLAUDE.md`
+- `API_CONTRACT.md`
+- `EPISODES.md`
+
+When you edit one, mirror it. From the root:
+
+```bash
+# macOS / Linux / Git Bash
+for f in CLAUDE.md API_CONTRACT.md EPISODES.md; do
+  for ep in social_impact_crew/ <other_episodes>/; do
+    cp "$f" "$ep"
+  done
+done
+```
+
+```powershell
+# PowerShell
+foreach ($f in 'CLAUDE.md','API_CONTRACT.md','EPISODES.md') {
+  foreach ($ep in 'social_impact_crew') { Copy-Item $f "$ep/" }
+}
+```
+
+The episode-specific `SETUP.md` lives only in the episode folder — don't copy it up to root.

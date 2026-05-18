@@ -3,9 +3,14 @@
 Why Open-Meteo: it's free, key-less, and rate-limit friendly for learners.
 Each tool subclasses crewai.tools.BaseTool with a Pydantic args_schema so the
 LLM gets a typed contract instead of free-form strings.
+
+Side-channel capture: tools return human-readable strings for the LLM, but
+also write structured dicts to a request-scoped ContextVar so the FastAPI
+wrapper can return typed JSON without re-fetching or parsing the LLM text.
 """
 
-from typing import Type
+from contextvars import ContextVar
+from typing import Optional, Type
 
 import requests
 from crewai.tools import BaseTool
@@ -13,6 +18,29 @@ from pydantic import BaseModel, Field
 
 # Short timeout so the agent fails fast on a flaky network instead of hanging.
 HTTP_TIMEOUT = 15
+
+# Per-request bucket. API layer calls `start_capture()` before kickoff,
+# `take_capture()` after. CLI path leaves it None — capture is a no-op.
+_capture_buffer: ContextVar[Optional[dict]] = ContextVar("capture_buffer", default=None)
+
+
+def start_capture() -> None:
+    """Begin capturing structured tool outputs for the current context."""
+    _capture_buffer.set({})
+
+
+def take_capture() -> dict:
+    """Return whatever was captured this context (and clear it)."""
+    data = _capture_buffer.get() or {}
+    _capture_buffer.set(None)
+    return data
+
+
+def _capture(key: str, payload: dict) -> None:
+    """No-op unless start_capture() was called for this context."""
+    buf = _capture_buffer.get()
+    if buf is not None:
+        buf[key] = payload
 
 
 # ---------- Geocode ----------
@@ -40,6 +68,12 @@ class GeocodeTool(BaseTool):
         if not results:
             return f"ERROR: no geocoding result for '{city}'."
         top = results[0]
+        _capture("coords", {
+            "lat": top["latitude"],
+            "lon": top["longitude"],
+            "name": top.get("name", city),
+            "country": top.get("country", ""),
+        })
         return (
             f"{top['latitude']},{top['longitude']},"
             f"{top.get('name', city)},{top.get('country', '')}"
@@ -76,6 +110,14 @@ class WeatherTool(BaseTool):
         cur = r.json().get("current", {})
         if not cur:
             return "ERROR: weather API returned no 'current' block."
+        _capture("weather", {
+            "temp_c": cur.get("temperature_2m"),
+            "feels_like_c": cur.get("apparent_temperature"),
+            "humidity_pct": cur.get("relative_humidity_2m"),
+            "wind_kmh": cur.get("wind_speed_10m"),
+            "precip_mm": cur.get("precipitation"),
+            "weather_code": cur.get("weather_code"),
+        })
         return (
             f"temp_c={cur.get('temperature_2m')}, "
             f"feels_like_c={cur.get('apparent_temperature')}, "
@@ -115,6 +157,14 @@ class PollutionTool(BaseTool):
         cur = r.json().get("current", {})
         if not cur:
             return "ERROR: air-quality API returned no 'current' block."
+        _capture("pollution", {
+            "european_aqi": cur.get("european_aqi"),
+            "pm2_5": cur.get("pm2_5"),
+            "pm10": cur.get("pm10"),
+            "no2": cur.get("nitrogen_dioxide"),
+            "o3": cur.get("ozone"),
+            "co": cur.get("carbon_monoxide"),
+        })
         return (
             f"european_aqi={cur.get('european_aqi')}, "
             f"pm2_5={cur.get('pm2_5')} ug/m3, "

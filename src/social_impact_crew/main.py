@@ -1,14 +1,20 @@
 """Entry point. Prompts the user for a city (defaulting to IP-detected
-location), then kicks off the crew and plots the agent graph."""
+location), then kicks off the crew."""
 
 import sys
 from typing import Optional
 
+import openlit
 import requests
 from dotenv import load_dotenv
 
 from .crew import SocialImpactCrew
 from .llm import detect_provider, no_provider_message
+
+# One-liner observability: auto-instruments LLM + HTTP calls. Default OTLP
+# endpoint is http://127.0.0.1:4318; override with OTEL_EXPORTER_OTLP_ENDPOINT.
+# Silent no-op if no collector is running.
+openlit.init(application_name="social_impact_crew_cli")
 
 # Short timeout so a slow / blocked geo lookup doesn't stall startup.
 IP_LOOKUP_TIMEOUT = 5
