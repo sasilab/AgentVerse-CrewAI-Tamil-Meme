@@ -1,0 +1,62 @@
+# Task definitions. Each task lists the agent that owns it and (optionally)
+# the upstream tasks whose output it depends on. CrewAI passes those outputs
+# in as context automatically.
+
+weather_task:
+  description: >
+    For the city "{city}":
+    1. Call geocode_city to get latitude/longitude.
+    2. Call get_current_weather with those coordinates.
+    3. Summarize the current weather in 3-4 short sentences for a layperson.
+    Include the lat/lon in your final answer so downstream agents can reuse it.
+  expected_output: >
+    A short weather snapshot for {city}. First line: 'coords: <lat>,<lon>'.
+    Then 3-4 plain-English sentences about temperature, feels-like, humidity,
+    wind, and any precipitation.
+  agent: weather_reporter
+
+pollution_task:
+  description: >
+    Read the lat/lon from the weather report context, then call
+    get_air_quality with those coordinates. Interpret the European AQI band
+    (good / fair / moderate / poor / very poor / extremely poor) and call out
+    the dominant pollutant if PM2.5 or PM10 is high. Give practical advice
+    (mask? outdoor exercise? at-risk groups?).
+  expected_output: >
+    3-5 sentence air-quality briefing for {city}: AQI band, top pollutant,
+    and practical do/don't advice for today.
+  agent: pollution_analyst
+  context:
+    - weather_task
+
+meme_task:
+  # | (literal block) preserves the bullet points and example layout exactly
+  # as the LLM sees them — easier to debug than the folded > scalar.
+  description: |
+    Take the weather snapshot and the air-quality briefing and write a
+    Tanglish meme-style commentary for {city}.
+
+    Rules:
+    - 4 to 6 lines MAX (not more).
+    - Tanglish only — Tamil words in Roman script mixed with English.
+    - Punchy and sarcastic, like trending Tamil meme pages.
+    - Use emojis liberally (1-3 per line) for vibe.
+    - Reference at least one concrete number from the data (temp, AQI, PM2.5).
+    - ALWAYS end with a real health tip disguised as a funny warning.
+    - PG-rated. No slurs.
+
+    Examples of the EXACT style and tone you should write in:
+    - "Dei thambi.. 30 degree nu thermostat kaataadhu.. un udambu 36 degree la boil aaguthu 🍳 Humidity 81% la nee walking ponaaa... moonu adiyil full wet look guaranteed 💦"
+    - "AQI 30 nu paatha nalla iruku maari thaan.. aana PM2.5 ah nee daily suvaasikura.. free la slow poison saapdraa maari 😷 Mask podu illa AC room la hide aagu!"
+    - "Veyil 35 degree feels like.. Enna da feels like 45 nu body sollidhu! Veliya pona omlette maadhari veyichiruvaanga.. ulle iru da, Zomato call pannu 🏠🍕"
+
+    Match this energy. Do NOT just translate the analyst's report into Tanglish.
+    Roast the weather and the city. Make people laugh AND make them care.
+  expected_output: >
+    A 4-6 line Tanglish meme post about today's {city} weather + pollution,
+    ending with a real health tip disguised as a funny warning. Punchy, with
+    emojis. No preamble, no explanation — just the meme text.
+  agent: tamil_meme_writer
+  context:
+    - weather_task
+    - pollution_task
