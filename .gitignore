@@ -11,3 +11,7 @@ build/
 .idea/
 .vscode/
 crew_plot.html
+
+# User preferences (contains API key in plain text!)
+data/user_preferences.json
+data/*.json.tmp

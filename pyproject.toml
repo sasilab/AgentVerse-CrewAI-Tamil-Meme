@@ -5,7 +5,7 @@ description = "AgentVerse Episode: CrewAI + Weather + Pollution + Tamil Meme Wri
 requires-python = ">=3.10,<3.13"
 authors = [{ name = "Sasi", email = "sasistartup@gmail.com" }]
 dependencies = [
-    "crewai[tools]>=0.80.0",
+    "crewai[google-genai,tools]>=0.80.0",
     # litellm is required for Groq (CrewAI 1.x ships native support only for
     # openai/anthropic/gemini/deepseek/ollama/cerebras/dashscope/etc.)
     "litellm>=1.50.0",

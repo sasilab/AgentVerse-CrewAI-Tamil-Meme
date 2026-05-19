@@ -92,7 +92,7 @@ the app auto-detects it. All four supported providers:
 | Provider | Free? | Env var to set | Default model |
 |---|---|---|---|
 | Groq | yes | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` |
-| Gemini | yes | `GEMINI_API_KEY` | `gemini/gemini-2.0-flash` |
+| Gemini | yes | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` |
 | OpenAI | no | `OPENAI_API_KEY` | `gpt-4o-mini` |
 | Ollama | yes (local) | *(none — just run `ollama serve`)* | `ollama/llama3.2` |
 

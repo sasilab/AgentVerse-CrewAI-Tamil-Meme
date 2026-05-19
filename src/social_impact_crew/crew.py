@@ -8,7 +8,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
 from .llm import build_llm
-from .tools.custom_tool import GeocodeTool, PollutionTool, WeatherTool
+from .tools.custom_tool import PollutionTool, WeatherTool
 
 
 @CrewBase
@@ -22,9 +22,13 @@ class SocialImpactCrew:
 
     @agent
     def weather_reporter(self) -> Agent:
+        # Geocoding is done in api.py / main.py BEFORE kickoff and passed in
+        # as {lat}/{lon} inputs, so the agent only needs WeatherTool. This
+        # removes the LLM's ability to hallucinate coordinates for the weather
+        # call (which was the root cause of wrong-city bugs).
         return Agent(
             config=self.agents_config["weather_reporter"],
-            tools=[GeocodeTool(), WeatherTool()],
+            tools=[WeatherTool()],
             llm=build_llm(),
             verbose=True,
         )
@@ -41,7 +45,9 @@ class SocialImpactCrew:
     @agent
     def tamil_meme_writer(self) -> Agent:
         # No tools — pure creative writing on top of context.
-        # Higher temperature so the meme has more bite than the data agents.
+        # Higher temperature so creative personalities have more variety.
+        # Note: misleading legacy name — this agent now adapts to the chosen
+        # personality (sarcastic_meme / caring_friend / serious_analyst / ...).
         return Agent(
             config=self.agents_config["tamil_meme_writer"],
             llm=build_llm(temperature=0.9),

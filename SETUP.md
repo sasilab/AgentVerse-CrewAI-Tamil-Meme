@@ -107,7 +107,7 @@ pin a specific model (this overrides auto-detect):
 # in .env
 MODEL=groq/llama-3.1-8b-instant
 # or
-MODEL=gemini/gemini-2.0-flash
+MODEL=gemini/gemini-2.5-flash
 # or
 MODEL=gpt-4o-mini
 # or

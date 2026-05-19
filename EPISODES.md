@@ -66,9 +66,36 @@ per episode; the frontend (`agentverse-frontend/`) is reused.
 - **Delhi** (AQI 342, "extremely_poor"): meme escalated tone (🤢 and 💀 emojis), layered health advice (mask + AC + skip outdoors + see a doctor). Confirms the model scales tone with the data, doesn't just parrot one template.
 
 **Lessons for future episodes:**
-- Always run a high-extreme and low-extreme test (e.g. Chennai vs Delhi) to verify the creative agent isn't stuck on one tone
-- ContextVar side-channel pattern transfers to any framework where you control the tool layer
-- Free-tier LLM (Groq) is plenty fast for a 3-agent sequential crew (~10-20s end-to-end)
+- Always run a high-extreme and low-extreme test (e.g. Chennai vs Delhi) **and a non-obvious city in a different region** (e.g. Coburg, Germany) to verify the creative agent isn't stuck on one tone AND that the data path isn't silently using the wrong coordinates.
+- **Never trust an LLM to thread data between tools via a free-text string.** Discovered when EP01's weather agent hallucinated coordinates ("Coburg" → Melbourne suburb at 37.82, 145.07) instead of waiting for the geocode tool's output. Fix: pre-compute deterministically in the API/CLI layer, pass values as task inputs. See `CLAUDE.md § Pre-resolve coordinates` decision.
+- **Don't put input variables in `agents.yaml`.** CrewAI 1.x interpolates `{vars}` in tasks reliably but in agent `role`/`goal`/`backstory` only sometimes — literal `{city}` can survive into the prompt and confuse the model.
+- **Adopt BreezyBuddy DNA wholesale for the user-facing layer.** Mid-episode rebuild: replaced the minimalist PWA with a full BreezyBuddy-style settings panel + auto-save + permission banner + background mode + safety gate + 6 personalities + 4 languages. The cross-episode AgentVerse API contract stayed locked; the *internal* config layer matched a proven pattern instead of reinventing it.
+- **Safety gate before LLM, every time.** EP01 now refuses to joke when `european_aqi >= 100` — the meme writer never sees the request; api.py returns a hardcoded N95 alert with `kind: "safety"`. The LLM is a liability for life-safety messaging.
+- **BYOK via Settings, not env.** Users paste their key in the in-app Settings panel and it persists to `data/user_preferences.json`. The crew picks it up on the next request via a ContextVar — no restart, no .env editing. Future episodes inherit this for free by reusing `preferences.py` + `llm.set_runtime_overrides()`.
+- ContextVar side-channel pattern transfers to any framework where you control the tool layer.
+- Free-tier LLM (Groq) is plenty fast for a 3-agent sequential crew (~10-20s end-to-end).
+
+**Test results (post-BreezyBuddy-rebuild, 2026-05-19):**
+- **Coburg / sarcastic_meme / Tanglish:** 8.9°C, AQI 22 (fair). Meme references real temp + asthma (from saved `sensitive_groups`).
+- **Coburg / caring_friend / English:** same numbers, completely different warm tone in plain English. Confirms personality + language switch at runtime.
+- **Delhi / any personality:** AQI 324 → safety override fires, returns hardcoded N95 alert with `kind: "safety"`. LLM is bypassed.
+- Coords for all three are pre-resolved deterministically (no hallucination).
+
+**Test results (post-intent-classifier, 2026-05-19):**
+Eight messages through `/api/chat`, sarcastic_meme + Tanglish:
+
+| Input | intent_source | Routed to | Kind |
+|---|---|---|---|
+| `hi` | `fast:casual` | direct LLM, in-character | casual |
+| `enne thangam` | `fast:casual` | direct LLM, "Dei, enne thangam nu solraen…" | casual |
+| `how are you?` | `fast:casual` | direct LLM, "I'm good da, just watching…" | casual |
+| `change my language to Tamil` | `fast:settings` | fixed nudge to ⚙️ | settings |
+| `Chennai` | `llm:city` | crew run, AQI 30 fair | chat |
+| `what is the weather in Mumbai please?` | `llm:city` (city extracted: "Mumbai") | crew run, AQI 58 moderate | chat |
+| `enne chellam?` | `fast:casual` (never geocodes) | direct LLM | casual |
+| `Delhi` | `llm:city` | crew run + safety override (AQI 331) | safety |
+
+The previously-broken "enne chellam → Rasipuram" case is killed at the fast-path layer — it never hits geocoding. If something somehow makes it past intent classification, the `is_plausible_geocode` similarity check is the second line of defence (and on validation failure, we fall back to casual reply instead of erroring).
 
 ---
 

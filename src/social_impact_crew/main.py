@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from .crew import SocialImpactCrew
 from .llm import detect_provider, no_provider_message
+from .tools.custom_tool import GeocodeTool
 
 # One-liner observability: auto-instruments LLM + HTTP calls. Default OTLP
 # endpoint is http://127.0.0.1:4318; override with OTEL_EXPORTER_OTLP_ENDPOINT.
@@ -66,8 +67,17 @@ def run() -> None:
     city = _prompt_city()
     print(f"\nKicking off crew for: {city}\n")
 
+    # Pre-resolve coordinates so the agents don't have to (the LLM was
+    # hallucinating coords for the weather call — see api.py comment).
+    geo_str = GeocodeTool()._run(city=city)
+    if geo_str.startswith("ERROR"):
+        sys.exit(geo_str)
+    lat_s, lon_s, resolved_name, country = geo_str.split(",", 3)
+    lat, lon = float(lat_s), float(lon_s)
+    print(f"[geo] {city} -> {resolved_name}, {country} ({lat}, {lon})\n")
+
     crew_obj = SocialImpactCrew().crew()
-    result = crew_obj.kickoff(inputs={"city": city})
+    result = crew_obj.kickoff(inputs={"city": city, "lat": lat, "lon": lon})
 
     print("\n" + "=" * 60)
     print(f"FINAL MEME for {city}")
