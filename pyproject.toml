@@ -3,7 +3,7 @@ name = "social_impact_crew"
 version = "0.1.0"
 description = "AgentVerse Episode: CrewAI + Weather + Pollution + Tamil Meme Writer"
 requires-python = ">=3.10,<3.13"
-authors = [{ name = "Sasi", email = "sasistartup@gmail.com" }]
+authors = [{ name = "explainpannu" }]
 dependencies = [
     "crewai[google-genai,tools]>=0.80.0",
     # litellm is required for Groq (CrewAI 1.x ships native support only for

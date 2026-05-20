@@ -99,6 +99,38 @@ The previously-broken "enne chellam → Rasipuram" case is killed at the fast-pa
 
 ---
 
+### Session 2026-05-19 — comprehensive log
+
+**What shipped today (in roughly the order it happened):**
+
+1. **Repo restructure for the AgentVerse series** — moved `CLAUDE.md`/`SESSION.md` into `social_impact_crew/`, added root-level `.gitignore`, established the duplicate-docs pattern (CLAUDE/API_CONTRACT/EPISODES at root *and* in each episode). Cleaned canonical docs (no more SESSION.md scratchpad).
+2. **Coordinate-passing bug fixed** — pre-resolve coords in `api.py`/`main.py`, pass `{lat}`/`{lon}` as kickoff inputs. Stops the weather agent hallucinating "Coburg, Victoria" for the German Coburg. Stripped `{city}` from `agents.yaml` (kept it in `tasks.yaml` where interpolation is reliable).
+3. **BreezyBuddy DNA rebuild** — full frontend replacement: WhatsApp UI, settings panel with auto-save, 6 personalities, 4 languages, BYOK Settings, AQI alerts, Background Mode, service worker, permission banner. Backend gained `preferences.py` (JSON store with async lock), `personality.py` (6 personality blocks × 4 language blocks), `safety.py` (AQI override + injection sanitizer), runtime LLM overrides via ContextVar in `llm.py`, plus 5 new endpoints (`/api/settings` GET+POST, `/api/test-llm`, `/api/geocode`, `/api/nudge`, `/api/personalities`).
+4. **Frontend 405 / Model-dropdown / SW-cache fixes** — three issues fixed in one pass:
+    - `sw.js` now nukes all caches on `activate` (defensive against pre-rebuild `agentverse-v1` cache).
+    - CORS dropped `allow_credentials=True` (incompatible with `allow_origins=["*"]` per spec).
+    - Model field became a `<datalist>` autocomplete with curated models per provider, auto-fills sensible default on provider switch.
+5. **Intent classifier added** — new `intent.py` module with a fast regex classifier (catches `hi`, `enne thangam`, `change language`, `?`, etc.) + an LLM fallback that also *extracts* the city name from sentences like "what's the weather in Mumbai please". `POST /api/chat` is the new freeform endpoint; `POST /api/run` stays as the strict `{city}` contract for programmatic use. Casual replies are direct LLM calls in the chosen personality + language (no crew, ~1s on Groq).
+6. **Geocoder validation** — `is_plausible_geocode()` checks the returned name is name-similar (≥0.5 SequenceMatcher) or has a token overlap with the input. Fuzzy "enne chellam → Rasipuram"-class matches are rejected and fall back to casual reply instead of erroring.
+7. **Emotion + consent rules** baked into both the meme task description and the casual-reply system prompt: sick/tired/sad/anxious → drop personality, reply warmly, no nudge. Fast classifier catches the obvious phrases up front.
+8. **Prompt injection sanitizer** (`safety.py::sanitize_user_input`) — regex layer that replaces "ignore previous", "you are now", "reveal system prompt" with `[neutralized: …]` markers before the LLM sees the input. Direct port from BreezyBuddy.
+9. **Gemini 2.5 migration** — `gemini-2.0-flash` deprecated by Google. Updated everywhere: `llm.py` DEFAULTS, `settings.js` dropdown (added `gemini-2.5-pro` as a second suggestion), `.env.example`, `README.md`, `SETUP.md`. Default is now `gemini/gemini-2.5-flash`.
+
+**Final end-to-end test (after all of the above) — 8 messages through `/api/chat`, sarcastic_meme + Tanglish:** see the "post-intent-classifier" table above. Every routing decision correct; Delhi's AQI 331 triggers the hardcoded safety alert; Coburg's 9°C matches real local weather; the previously-broken Tamil chitchat cases land in the casual-reply path with in-character responses.
+
+**Stack at session end:**
+- Backend: FastAPI + CrewAI 1.14.4 + LiteLLM + OpenLIT, all behind `run_api` on `127.0.0.1:8000`. Hosts the frontend at `/`.
+- Frontend: vanilla JS PWA at `multi-agent/agentverse-frontend/` (reusable across episodes).
+- Persistence: `data/user_preferences.json` (gitignored, contains BYO key in plain text).
+- LLM: any of Groq / Gemini / OpenAI / Claude / Ollama, auto-detected from runtime overrides → env vars.
+
+**Carry-over for future sessions:**
+- The cross-episode `POST /api/run` contract is still locked. New episodes should also expose `POST /api/chat` (richer interface) if they want the freeform chat UX out of the box.
+- `intent.py` and `safety.py` are framework-agnostic — they transfer directly to LangGraph / ADK / AutoGen episodes.
+- The fast classifier's regex set is English + Tamil/Tanglish; future non-Indian-language episodes should extend it (or rely more heavily on the LLM fallback).
+
+---
+
 ## Template for a new episode
 
 Copy this block when adding an episode:

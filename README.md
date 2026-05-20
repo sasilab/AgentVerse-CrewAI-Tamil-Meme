@@ -45,15 +45,36 @@ is for the LLM.
 
 ## Features
 
-- **City auto-detect** — on startup, your city is guessed from your public IP
-  (via [ipinfo.io](https://ipinfo.io), no key needed). Press Enter to accept,
-  or type any other city to override. Pass a city on the CLI to skip the
-  prompt entirely.
-- **Bring-your-own-key (BYOK)** — drop *any one* of `GROQ_API_KEY`,
-  `GEMINI_API_KEY`, `OPENAI_API_KEY` into `.env`, or run Ollama locally with
-  no key at all. The app picks the first provider it finds (preference order:
-  Groq → Gemini → OpenAI → Ollama). If none are set, you get a friendly
-  message listing every option and where to get a key.
+- **Intent detection** — two-layer classifier (regex fast-path + LLM fallback)
+  routes each message to the right path: city query → full crew, casual
+  chitchat → direct LLM, settings command → nudge. Stops "hi" from kicking off
+  a 3-agent run and stops Tamil chitchat ("enne chellam") from fuzzy-matching
+  random villages.
+- **Safety guardrails** — rule-based AQI override fires *before* the LLM: when
+  `european_aqi >= 100`, a hardcoded health alert is returned and the meme
+  writer never gets to joke about hazardous air.
+- **Emotion + consent override** — if you sound sick, tired, sad, anxious, or
+  say "leave me alone", personality drops away and the reply is warm, brief,
+  and nudge-free. Health and consent override personality.
+- **Prompt-injection protection** — soft regex sanitiser neutralises common
+  "ignore previous instructions" / "you are now" / "reveal system prompt"
+  phrasings before they reach the model. Defence-in-depth, not a hard boundary.
+- **6 personalities × 4 languages** — Sarcastic, Wholesome, Dad-jokes,
+  Stoic-philosopher, Chaotic-genZ, Aunty-mode × English / Tanglish / Tamil /
+  Hindi. Swap voices live from the Settings panel; no restart, no code edits.
+- **BYOK via Settings panel (or .env)** — drop any one of `GROQ_API_KEY`,
+  `GEMINI_API_KEY`, `OPENAI_API_KEY` into `.env`, or paste a key into the
+  frontend Settings panel and it's used immediately (no restart). Ollama works
+  with no key. Preference order: Groq → Gemini → OpenAI → Ollama.
+- **Background AQI polling** — the frontend periodically calls `/api/run` to
+  refresh the AQI pill so the badge stays current without user interaction.
+- **Push notifications** — in-tab Notification API + service worker fire a
+  local alert when the AQI crosses a threshold. No VAPID keys, no server-side
+  push endpoint required.
+- **City auto-detect** — on CLI startup, your city is guessed from your public
+  IP (via [ipinfo.io](https://ipinfo.io), no key needed). Press Enter to
+  accept, or type any other city to override. Pass a city on the CLI to skip
+  the prompt entirely.
 
 ## Quickstart
 
@@ -81,8 +102,8 @@ python -m social_impact_crew.main              # asks for a city
 python -m social_impact_crew.main Bengaluru    # or pass it on the CLI
 ```
 
-You'll get verbose CrewAI logs as each agent works, an interactive
-`crew_plot.html` of the agent graph, and the final meme printed at the bottom.
+You'll get verbose CrewAI logs as each agent works, and the final meme
+printed at the bottom.
 
 ## Switching the LLM
 
@@ -108,9 +129,13 @@ social_impact_crew/
 ├── architecture.md             # Mermaid diagram + locked API contract
 └── src/social_impact_crew/
     ├── main.py                 # CLI entry point + IP geolocation + OpenLIT
-    ├── api.py                  # FastAPI wrapper — POST /api/run
+    ├── api.py                  # FastAPI wrapper — POST /api/run + /api/chat
     ├── crew.py                 # @CrewBase wiring
-    ├── llm.py                  # provider auto-detection (BYOK)
+    ├── llm.py                  # provider auto-detection (BYOK) + runtime overrides
+    ├── intent.py               # two-layer intent classifier (regex + LLM fallback)
+    ├── personality.py          # 6 personalities × 4 languages voice blocks
+    ├── preferences.py          # JSON-file user prefs (async lock + atomic write)
+    ├── safety.py               # AQI safety override + prompt-injection sanitiser
     ├── config/
     │   ├── agents.yaml         # role / goal / backstory per agent
     │   └── tasks.yaml          # description / expected_output / context
@@ -119,17 +144,32 @@ social_impact_crew/
                                 # + ContextVar side-channel for API capture
 ```
 
-## Running as an API (for the AgentVerse frontend)
+## Running as an API
 
 ```bash
 run_api                # serves on http://127.0.0.1:8000
-# POST http://127.0.0.1:8000/api/run  {"city": "Chennai"}
-# returns {city, coords, weather, pollution, aqi_level, meme}
+# POST http://127.0.0.1:8000/api/run   {"city": "Chennai"}
+# POST http://127.0.0.1:8000/api/chat  {"message": "hi"}
+# /api/run returns {city, coords, weather, pollution, aqi_level, meme}
 ```
 
-The frontend lives in a sibling folder `../agentverse-frontend/` — see its
-README for how to point it at this backend. The `POST /api/run` contract is
-stable across every AgentVerse episode.
+## Frontend
+
+The AgentVerse PWA frontend lives in its own repo:
+
+**→ [github.com/sasilab/AgentVerse-Frontend](https://github.com/sasilab/AgentVerse-Frontend)**
+
+It's a single static PWA reused across every AgentVerse episode. To connect it
+to this backend:
+
+1. Start this backend: `run_api` (serves on `http://127.0.0.1:8000`).
+2. Clone & serve the frontend per its README.
+3. Open the Settings panel in the PWA and point the API base URL at
+   `http://127.0.0.1:8000`. Paste your LLM key, pick a personality and
+   language, and you're done.
+
+The `POST /api/run` contract is stable across every AgentVerse episode, so the
+same frontend works against any episode backend.
 
 ## Observability
 
